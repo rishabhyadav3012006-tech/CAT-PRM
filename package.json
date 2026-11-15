@@ -1,0 +1,34 @@
+{
+  "name": "carenest-platform",
+  "version": "1.0.0",
+  "description": "CareNest - Smart Elderly Healthcare Management Ecosystem",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -k -p \"[{name}]\" -n \"BACKEND,FRONTEND\" -c \"cyan.bold,magenta.bold\" \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build:backend": "npm --prefix backend run build",
+    "build:frontend": "npm --prefix frontend run build",
+    "build": "npm run build:backend && npm run build:frontend",
+    "test": "node backend/test-api.mjs",
+    "prisma:generate": "npm --prefix backend run prisma:generate",
+    "prisma:migrate": "npm --prefix backend run prisma:migrate",
+    "prisma:seed": "npm --prefix backend run prisma:seed",
+    "install:all": "npm --prefix backend install && npm --prefix frontend install"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "keywords": [
+    "elderly-care",
+    "healthcare-platform",
+    "medication-tracker",
+    "react",
+    "express",
+    "prisma",
+    "bullmq"
+  ],
+  "author": "CareNest Team",
+  "license": "MIT"
+}
+

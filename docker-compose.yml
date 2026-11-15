@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  carenest-postgres:
+    image: postgres:16-alpine
+    container_name: carenest-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: carenest_user
+      POSTGRES_PASSWORD: carenest_secure_password_2026
+      POSTGRES_DB: carenest_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U carenest_user -d carenest_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  carenest-redis:
+    image: redis:7-alpine
+    container_name: carenest-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  carenest-adminer:
+    image: adminer:latest
+    container_name: carenest-adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      - carenest-postgres
+
+volumes:
+  postgres_data:
+  redis_data:
+

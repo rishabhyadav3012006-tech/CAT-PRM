@@ -1,0 +1,697 @@
+// ==============================================================================
+// CareNest Healthcare Platform - Complete PostgreSQL Database Schema
+// ORM: Prisma Client
+// High-Reliability Architecture for Elderly Healthcare Management
+// ==============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==============================================================================
+// ENUMS
+// ==============================================================================
+
+enum UserRole {
+  ELDERLY
+  FAMILY_MEMBER
+  CAREGIVER
+  CARETAKER
+  DOCTOR
+  ADMIN
+}
+
+enum MemberRole {
+  ELDERLY_SELF
+  PRIMARY_CAREGIVER
+  FAMILY_ADMIN
+  FAMILY_VIEWER
+  CARETAKER
+  PHYSICIAN
+}
+
+enum MembershipStatus {
+  ACTIVE
+  PENDING_APPROVAL
+  REVOKED
+  SUSPENDED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+enum MedicationCategory {
+  CARDIOVASCULAR
+  DIABETES
+  NEUROLOGICAL
+  ANALGESIC
+  ANTIBIOTIC
+  SUPPLEMENT
+  RESPIRATORY
+  GASTROINTESTINAL
+  OTHER
+}
+
+enum MedicationForm {
+  TABLET
+  CAPSULE
+  LIQUID
+  INJECTION
+  TOPICAL
+  DROPS
+  INHALER
+  PATCH
+  OTHER
+}
+
+enum FoodRequirement {
+  BEFORE_FOOD
+  AFTER_FOOD
+  WITH_FOOD
+  NO_RESTRICTION
+}
+
+enum MedicationLogStatus {
+  UPCOMING
+  SCHEDULED
+  PENDING
+  TAKEN
+  SKIPPED
+  MISSED
+  CANCELLED
+  SNOOZED
+}
+
+enum AppointmentStatus {
+  UPCOMING
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  RESCHEDULED
+}
+
+enum VaultCategory {
+  PRESCRIPTION
+  BLOOD_REPORT
+  MEDICAL_HISTORY
+  DIAGNOSTIC_REPORT
+  DISCHARGE_SUMMARY
+  OTHER
+}
+
+enum ActivityCategory {
+  HYGIENE
+  MEAL
+  MOBILITY
+  EXERCISE
+  MENTAL_HEALTH
+  CHECKUP
+  OTHER
+}
+
+enum ActivityStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
+}
+
+enum NotificationType {
+  MEDICATION_REMINDER
+  MEDICATION_MISSED
+  APPOINTMENT_REMINDER
+  CARE_ACTIVITY_DUE
+  EMERGENCY_ALERT
+  CIRCLE_INVITE
+  SYSTEM_NOTICE
+}
+
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  SMS
+  PUSH
+}
+
+enum AuditAction {
+  CREATE
+  READ
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  PASSWORD_RESET
+  INVITE_SENT
+  INVITE_ACCEPTED
+  ROLE_CHANGED
+  PERMISSION_CHANGED
+  DOCUMENT_DOWNLOADED
+  DOCUMENT_ARCHIVED
+  EMERGENCY_TRIGGERED
+  EMERGENCY_RESOLVED
+}
+
+// ==============================================================================
+// 1. USER MODEL
+// Authentication, credentials, role-based identity, and global settings
+// ==============================================================================
+model User {
+  id              String                  @id @default(uuid())
+  email           String                  @unique
+  password        String                  // Hashed with bcrypt (never plain-text)
+  name            String                  @map("full_name")
+  phone           String?
+  avatarUrl       String?                 @map("avatar_url")
+  role            UserRole                @default(FAMILY_MEMBER)
+  timeZone        String                  @default("UTC") @map("time_zone")
+  isEmailVerified Boolean                 @default(false) @map("is_email_verified")
+  isActive        Boolean                 @default(true) @map("is_active")
+  lastLoginAt     DateTime?               @map("last_login_at")
+  deletedAt       DateTime?               @map("deleted_at") // Soft deletion
+  createdAt       DateTime                @default(now()) @map("created_at")
+  updatedAt       DateTime                @updatedAt @map("updated_at")
+
+  // Core Relationship Links
+  elderlyProfile          ElderlyProfile?
+  careMemberships         CareMember[]            @relation("UserCareMemberships")
+  sentInvitations         Invitation[]            @relation("SentInvitations")
+  acceptedInvitations     Invitation[]            @relation("AcceptedInvitations")
+  createdMedications      Medication[]            @relation("MedicationCreator")
+  recordedMedLogs         MedicationLog[]         @relation("MedLogRecorder")
+  createdAppointments     Appointment[]           @relation("AppointmentCreator")
+  uploadedMedicalRecords  MedicalRecord[]         @relation("DocumentUploader")
+  createdActivities       CareActivity[]          @relation("ActivityCreator")
+  assignedActivities      CareActivity[]          @relation("ActivityAssignee")
+  completedActivities     CareActivity[]          @relation("ActivityCompleter")
+  recordedHealthLogs      HealthLog[]             @relation("HealthLogRecorder")
+  triggeredAlerts         EmergencyAlert[]        @relation("AlertTriggerer")
+  notifications           Notification[]          @relation("UserNotifications")
+  notificationPreference  NotificationPreference?
+  auditLogs               AuditLog[]              @relation("ActorAuditLogs")
+
+  @@index([email])
+  @@index([role])
+  @@index([isActive])
+  @@index([deletedAt])
+  @@map("users")
+}
+
+// ==============================================================================
+// 2. ELDERLY PROFILE MODEL
+// Clinical baseline, demographics, medical conditions, and emergency contacts
+// ==============================================================================
+model ElderlyProfile {
+  id                       String           @id @default(uuid())
+  userId                   String           @unique @map("user_id")
+  dateOfBirth              DateTime?        @map("date_of_birth")
+  gender                   String?
+  bloodGroup               String?          @map("blood_group") // "O+", "A+", "B+", "AB-"
+  allergies                String[]         @default([])
+  chronicConditions        String[]         @default([]) @map("chronic_conditions")
+  address                  String?
+  timeZone                 String           @default("UTC") @map("time_zone")
+  primaryDoctorName        String?          @map("primary_doctor_name")
+  primaryDoctorContact     String?          @map("primary_doctor_contact")
+  emergencyContactName     String           @map("emergency_contact_name")
+  emergencyContactPhone    String           @map("emergency_contact_phone")
+  emergencyContactRelation String           @map("emergency_contact_relation")
+  mobilityStatus           String?          @map("mobility_status") // "Independent", "Assisted Walk", "Wheelchair", "Bedbound"
+  dietaryRestrictions     String?          @map("dietary_restrictions")
+  notes                    String?
+  isArchived               Boolean          @default(false) @map("is_archived")
+  archivedAt               DateTime?        @map("archived_at")
+  createdAt                DateTime         @default(now()) @map("created_at")
+  updatedAt                DateTime         @updatedAt @map("updated_at")
+
+  // Relationships
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  careMembers     CareMember[]
+  invitations     Invitation[]
+  medications     Medication[]
+  appointments    Appointment[]
+  medicalRecords  MedicalRecord[]
+  careActivities  CareActivity[]
+  healthLogs      HealthLog[]
+  emergencyAlerts EmergencyAlert[]
+  auditLogs       AuditLog[]
+
+  @@index([userId])
+  @@index([isArchived])
+  @@map("elderly_profiles")
+}
+
+// ==============================================================================
+// 3. CARE MEMBER MODEL
+// Multi-patient to multi-caretaker link with granular profile-level permissions
+// ==============================================================================
+model CareMember {
+  id                   String           @id @default(uuid())
+  elderlyId            String           @map("elderly_id")
+  userId               String           @map("user_id")
+  role                 MemberRole       @default(FAMILY_VIEWER)
+  relationship         String?          // e.g. "Daughter", "Son", "Head Caretaker", "Self"
+  status               MembershipStatus @default(ACTIVE)
+
+  // Granular Profile Permissions
+  canManageMedications Boolean          @default(false) @map("can_manage_medications")
+  canLogMedicationIntake Boolean        @default(true) @map("can_log_medication_intake")
+  canManageAppointments Boolean         @default(false) @map("can_manage_appointments")
+  canViewVitals        Boolean          @default(true) @map("can_view_vitals")
+  canLogVitals         Boolean          @default(false) @map("can_log_vitals")
+  canManageCareTasks   Boolean          @default(false) @map("can_manage_care_tasks")
+  canViewDocuments     Boolean          @default(true) @map("can_view_documents")
+  canUploadDocuments   Boolean          @default(false) @map("can_upload_documents")
+  canInviteMembers     Boolean          @default(false) @map("can_invite_members")
+  canTriggerEmergency  Boolean          @default(true) @map("can_trigger_emergency")
+
+  // Caretaker shift schedule
+  shiftStart           String?          @map("shift_start") // e.g. "08:00"
+  shiftEnd             String?          @map("shift_end")   // e.g. "17:00"
+  notes                String?
+
+  joinedAt             DateTime         @default(now()) @map("joined_at")
+  updatedAt            DateTime         @updatedAt @map("updated_at")
+  revokedAt            DateTime?        @map("revoked_at")
+  revokedById          String?          @map("revoked_by_id")
+
+  // Relationships
+  elderly              ElderlyProfile   @relation(fields: [elderlyId], references: [id], onDelete: Cascade)
+  user                 User             @relation("UserCareMemberships", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([elderlyId, userId])
+  @@index([elderlyId])
+  @@index([userId])
+  @@index([status])
+  @@index([role])
+  @@map("care_members")
+}
+
+// ==============================================================================
+// 4. INVITATION MODEL
+// Secure, time-bounded, single-use cryptographically hashed invitation codes
+// ==============================================================================
+model Invitation {
+  id               String           @id @default(uuid())
+  elderlyId        String           @map("elderly_id")
+  invitedByUserId  String           @map("invited_by_user_id")
+  inviteCodeHash   String           @unique @map("invite_code_hash") // SHA-256 hash (never plain-text)
+  inviteCodeMask   String           @map("invite_code_mask") // e.g. "NEST-****-9363"
+  targetEmail      String?          @map("target_email")
+  assignedRole     MemberRole       @default(FAMILY_VIEWER) @map("assigned_role")
+  permissions      Json?            // Explicit permission grant override
+  status           InvitationStatus @default(PENDING)
+  expiresAt        DateTime         @map("expires_at")
+  acceptedAt       DateTime?        @map("accepted_at")
+  acceptedByUserId String?          @map("accepted_by_user_id")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+
+  // Relationships
+  elderly          ElderlyProfile   @relation(fields: [elderlyId], references: [id], onDelete: Cascade)
+  invitedBy        User             @relation("SentInvitations", fields: [invitedByUserId], references: [id])
+  acceptedBy       User?            @relation("AcceptedInvitations", fields: [acceptedByUserId], references: [id])
+
+  @@index([elderlyId])
+  @@index([inviteCodeHash])
+  @@index([status, expiresAt])
+  @@index([targetEmail])
+  @@map("invitations")
+}
+
+// ==============================================================================
+// 5. MEDICATION MODEL
+// Master medication catalog, prescriptions, instructions, and stock tracking
+// ==============================================================================
+model Medication {
+  id                      String             @id @default(uuid())
+  elderlyId               String             @map("elderly_id")
+  createdById             String             @map("created_by_id")
+  name                    String
+  genericName             String?            @map("generic_name")
+  category                MedicationCategory @default(OTHER)
+  dosage                  String             // "10mg", "1 tablet"
+  form                    MedicationForm     @default(TABLET)
+  frequency               String             @default("DAILY")
+  scheduledTimes          String[]           @default([]) @map("scheduled_times")
+  instructions            String?            // "Take with water after breakfast"
+  foodRequirement         FoodRequirement    @default(NO_RESTRICTION) @map("food_requirement")
+  startDate               DateTime           @map("start_date")
+  endDate                 DateTime?          @map("end_date")
+  stockQuantity           Int                @default(30) @map("stock_quantity")
+  refillReminderThreshold Int                @default(5) @map("refill_reminder_threshold")
+  lastRefillDate          DateTime?          @map("last_refill_date")
+  isActive                Boolean            @default(true) @map("is_active")
+  isArchived              Boolean            @default(false) @map("is_archived")
+  archivedAt              DateTime?          @map("archived_at")
+  archivedById            String?            @map("archived_by_id")
+  deletedAt               DateTime?          @map("deleted_at")
+  createdAt               DateTime           @default(now()) @map("created_at")
+  updatedAt               DateTime           @updatedAt @map("updated_at")
+
+  // Relationships
+  elderly                 ElderlyProfile     @relation(fields: [elderlyId], references: [id], onDelete: Cascade)
+  createdBy               User               @relation("MedicationCreator", fields: [createdById], references: [id])
+  schedules               MedicationSchedule[]
+  logs                    MedicationLog[]
+
+  @@index([elderlyId])
+  @@index([elderlyId, isActive])
+  @@index([name])
+  @@index([isArchived])
+  @@map("medications")
+}
+
+// ==============================================================================
+// 6. MEDICATION SCHEDULE MODEL
+// Time slots, recurrence rules, and day-of-week dose schedules
+// ==============================================================================
+model MedicationSchedule {
+  id             String          @id @default(uuid())
+  medicationId   String          @map("medication_id")
+  timeOfDay      String          @map("time_of_day") // "08:00", "20:00" in HH:mm
+  dosageOverride String?         @map("dosage_override")
+  daysOfWeek     Int[]           @default([0, 1, 2, 3, 4, 5, 6]) @map("days_of_week") // 0=Sun..6=Sat
+  label          String?         // "Morning with Breakfast"
+  isActive       Boolean         @default(true) @map("is_active")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  // Relationships
+  medication     Medication      @relation(fields: [medicationId], references: [id], onDelete: Cascade)
+  logs           MedicationLog[]
+
+  @@index([medicationId])
+  @@index([medicationId, timeOfDay])
+  @@map("medication_schedules")
+}
+
+// ==============================================================================
+// 7. MEDICATION LOG MODEL
+// Immutable historical ledger of doses taken, skipped, missed, and recorded by
+// ==============================================================================
+model MedicationLog {
+  id             String              @id @default(uuid())
+  medicationId   String              @map("medication_id")
+  scheduleId     String?             @map("schedule_id")
+  scheduledFor   DateTime            @map("scheduled_for") // UTC scheduled timestamp
+  takenAt        DateTime?           @map("taken_at")
+  status         MedicationLogStatus @default(PENDING)
+  loggedById     String?             @map("logged_by_id")
+  recordedByName String?             @map("recorded_by_name")
+  recordedByRole String?             @map("recorded_by_role")
+  skipReason     String?             @map("skip_reason")
+  dosageTaken    String?             @map("dosage_taken")
+  notes          String?
+  isConfirmed    Boolean             @default(true) @map("is_confirmed")
+  confirmedById  String?             @map("confirmed_by_id")
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+
+  // Relationships
+  medication     Medication          @relation(fields: [medicationId], references: [id], onDelete: Cascade)
+  schedule       MedicationSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  loggedBy       User?               @relation("MedLogRecorder", fields: [loggedById], references: [id])
+
+  // Prevent duplicate dose recording for the same scheduled slot
+  @@unique([medicationId, scheduledFor])
+  @@index([medicationId])
+  @@index([scheduledFor])
+  @@index([status])
+  @@index([loggedById])
+  @@map("medication_logs")
+}
+
+// ==============================================================================
+// 8. APPOINTMENT MODEL
+// Doctor appointments, clinical consultations, reminders, and notes
+// ==============================================================================
+model Appointment {
+  id                 String            @id @default(uuid())
+  elderlyId          String            @map("elderly_id")
+  createdById        String            @map("created_by_id")
+  doctorName         String            @map("doctor_name")
+  specialty          String
+  hospital           String?
+  location           String
+  contactPhone       String?           @map("contact_phone")
+  appointmentDate    DateTime          @map("appointment_date") // UTC
+  durationMinutes    Int               @default(30) @map("duration_minutes")
+  status             AppointmentStatus @default(UPCOMING)
+  reminderSent       Boolean           @default(false) @map("reminder_sent")
+  cancellationReason String?           @map("cancellation_reason")
+  notes              String?
+  consultationNotes  String?           @map("consultation_notes")
+  deletedAt          DateTime?         @map("deleted_at")
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
+
+  // Relationships
+  elderly            ElderlyProfile    @relation(fields: [elderlyId], references: [id], onDelete: Cascade)
+  createdBy          User              @relation("AppointmentCreator", fields: [createdById], references: [id])
+
+  @@index([elderlyId])
+  @@index([appointmentDate])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("appointments")
+}
+
+// ==============================================================================
+// 9. MEDICAL RECORD MODEL
+// Secure Medical Records & Prescription Vault with HMAC verification & categorization
+// ==============================================================================
+model MedicalRecord {
+  id            String        @id @default(uuid())
+  elderlyId     String        @map("elderly_id")
+  uploadedById  String        @map("uploaded_by_id")
+  title         String
+  category      VaultCategory @default(OTHER)
+  fileUrl       String        @map("file_url") // Private storage path (private://vault/...)
+  fileHash      String        @map("file_hash") // SHA-256 integrity hash
+  fileName      String        @map("file_name")
+  fileExtension String        @map("file_extension") // ".pdf", ".png", ".jpg"
+  mimeType      String        @map("mime_type")
+  sizeBytes     Int           @map("size_bytes")
+  doctorName    String?       @map("doctor_name")
+  facilityName  String?       @map("facility_name")
+  documentDate  DateTime      @default(now()) @map("document_date")
+  tags          String[]      @default([])
+  summary       String?
+  isArchived    Boolean       @default(false) @map("is_archived")
+  archivedAt    DateTime?     @map("archived_at")
+  archivedById  String?       @map("archived_by_id")
+  archiveReason String?       @map("archive_reason")
+  deletedAt     DateTime?     @map("deleted_at")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  // Relationships
+  elderly       ElderlyProfile @relation(fields: [elderlyId], references: [id], onDelete: Cascade)
+  uploadedBy    User           @relation("DocumentUploader", fields: [uploadedById], references: [id])
+
+  @@index([elderlyId])
+  @@index([category])
+  @@index([isArchived])
+  @@index([documentDate])
+  @@index([deletedAt])
+  @@map("medical_records")
+}
+
+// ==============================================================================
+// 10. NOTIFICATION MODEL
+// Multi-channel dispatch (In-App, Email, SMS, Push) with priority & read state
+// ==============================================================================
+model Notification {
+  id         String               @id @default(uuid())
+  userId     String               @map("user_id")
+  elderlyId  String?              @map("elderly_id")
+  type       NotificationType     @default(SYSTEM_NOTICE)
+  title      String
+  message    String
+  priority   NotificationPriority @default(NORMAL)
+  channel    NotificationChannel  @default(IN_APP)
+  isRead     Boolean              @default(false) @map("is_read")
+  readAt     DateTime?            @map("read_at")
+  actionUrl  String?              @map("action_url")
+  metadata   Json?
+  sentAt     DateTime             @default(now()) @map("sent_at")
+  createdAt  DateTime             @default(now()) @map("created_at")
+
+  // Relationships
+  user       User                 @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([userId, sentAt])
+  @@index([priority])
+  @@map("notifications")
+}
+
+// ==============================================================================
+// 11. CARE ACTIVITY MODEL
+// Daily care checklist: hygiene, mobility, meals, medications, and wellness
+// ==============================================================================
+model CareActivity {
+  id            String           @id @default(uuid())
+  elderlyId     String           @map("elderly_id")
+  createdById   String           @map("created_by_id")
+  assignedToId  String?          @map("assigned_to_id")
+  completedById String?          @map("completed_by_id")
+  title         String
+  description   String?
+  category      ActivityCategory @default(OTHER)
+  scheduledDate DateTime         @map("scheduled_date")
+  scheduledTime String           @map("scheduled_time") // "09:00"
+  status        ActivityStatus   @default(PENDING)
+  completedAt   DateTime?        @map("completed_at")
+  notes         String?
+  deletedAt     DateTime?        @map("deleted_at")
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+
+  // Relationships
+  elderly       ElderlyProfile   @relation(fields: [elderlyId], references: [id], onDelete: Cascade)
+  createdBy     User             @relation("ActivityCreator", fields: [createdById], references: [id])
+  assignedTo    User?            @relation("ActivityAssignee", fields: [assignedToId], references: [id])
+  completedBy   User?            @relation("ActivityCompleter", fields: [completedById], references: [id])
+
+  @@index([elderlyId])
+  @@index([scheduledDate])
+  @@index([status])
+  @@index([assignedToId])
+  @@index([deletedAt])
+  @@map("care_activities")
+}
+
+// ==============================================================================
+// 12. HEALTH LOG MODEL
+// Longitudinal biometric telemetry: Blood pressure, glucose, SpO2, heart rate
+// ==============================================================================
+model HealthLog {
+  id               String         @id @default(uuid())
+  elderlyId        String         @map("elderly_id")
+  recordedById     String         @map("recorded_by_id")
+  recordedAt       DateTime       @default(now()) @map("recorded_at")
+  systolicBp       Int?           @map("systolic_bp") // mmHg
+  diastolicBp      Int?           @map("diastolic_bp") // mmHg
+  bloodGlucose     Float?         @map("blood_glucose") // mg/dL
+  heartRate        Int?           @map("heart_rate") // bpm
+  oxygenSaturation Float?         @map("oxygen_saturation") // % SpO2
+  bodyTemperature  Float?         @map("body_temperature") // °F
+  weight           Float?         // kg
+  isAlert          Boolean        @default(false) @map("is_alert")
+  alertReason      String?        @map("alert_reason")
+  notes            String?
+  createdAt        DateTime       @default(now()) @map("created_at")
+
+  // Relationships
+  elderly          ElderlyProfile @relation(fields: [elderlyId], references: [id], onDelete: Cascade)
+  recordedBy       User           @relation("HealthLogRecorder", fields: [recordedById], references: [id])
+
+  @@index([elderlyId])
+  @@index([recordedAt])
+  @@index([isAlert])
+  @@map("health_logs")
+}
+
+// ==============================================================================
+// 13. AUDIT LOG MODEL
+// HIPAA and security compliance ledger: Tracks who touched what and when
+// ==============================================================================
+model AuditLog {
+  id            String         @id @default(uuid())
+  elderlyId     String?        @map("elderly_id")
+  actorId       String?        @map("actor_id") // Nullable for system tasks / background cron
+  action        AuditAction
+  entityType    String         @map("entity_type") // "Medication", "MedicalRecord", "CareMember", etc.
+  entityId      String         @map("entity_id")
+  description   String
+  previousState Json?          @map("previous_state") // Snapshot diff
+  newState      Json?          @map("new_state")
+  ipAddress     String?        @map("ip_address")
+  userAgent     String?        @map("user_agent")
+  createdAt     DateTime       @default(now()) @map("created_at")
+
+  // Relationships
+  actor         User?          @relation("ActorAuditLogs", fields: [actorId], references: [id], onDelete: SetNull)
+  elderly       ElderlyProfile? @relation(fields: [elderlyId], references: [id], onDelete: Cascade)
+
+  @@index([entityType, entityId])
+  @@index([actorId])
+  @@index([elderlyId])
+  @@index([createdAt])
+  @@index([action])
+  @@map("audit_logs")
+}
+
+// ==============================================================================
+// 14. NOTIFICATION PREFERENCE MODEL
+// Granular user delivery preferences, alert categories, and quiet hours
+// ==============================================================================
+model NotificationPreference {
+  id                   String   @id @default(uuid())
+  userId               String   @unique @map("user_id")
+  emailNotifications   Boolean  @default(true) @map("email_notifications")
+  smsNotifications     Boolean  @default(false) @map("sms_notifications")
+  pushNotifications    Boolean  @default(true) @map("push_notifications")
+  medicationReminders  Boolean  @default(true) @map("medication_reminders")
+  missedDoseAlerts     Boolean  @default(true) @map("missed_dose_alerts")
+  appointmentReminders Boolean  @default(true) @map("appointment_reminders")
+  careActivityUpdates  Boolean  @default(true) @map("care_activity_updates")
+  emergencyAlerts      Boolean  @default(true) @map("emergency_alerts")
+  reminderLeadMinutes  Int      @default(15) @map("reminder_lead_minutes")
+  quietHoursEnabled    Boolean  @default(false) @map("quiet_hours_enabled")
+  quietHoursStart      String?  @map("quiet_hours_start") // "22:00"
+  quietHoursEnd        String?  @map("quiet_hours_end")   // "07:00"
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([emailNotifications])
+  @@map("notification_preferences")
+}
+
+// ==============================================================================
+// COMPLEMENTARY MODEL: EMERGENCY ALERT
+// Immediate incident response, coordinates SOS alerts, geo-coordinates, resolution
+// ==============================================================================
+model EmergencyAlert {
+  id            String         @id @default(uuid())
+  elderlyId     String         @map("elderly_id")
+  triggeredById String         @map("triggered_by_id")
+  triggeredAt   DateTime       @default(now()) @map("triggered_at")
+  type          String         @default("SOS_BUTTON") // "SOS_BUTTON", "FALL_DETECTED", "CRITICAL_VITAL"
+  message       String?
+  latitude      Float?
+  longitude     Float?
+  resolved      Boolean        @default(false)
+  resolvedAt    DateTime?      @map("resolved_at")
+  resolvedNotes String?        @map("resolved_notes")
+  createdAt     DateTime       @default(now()) @map("created_at")
+
+  // Relationships
+  elderly       ElderlyProfile @relation(fields: [elderlyId], references: [id], onDelete: Cascade)
+  triggeredBy   User           @relation("AlertTriggerer", fields: [triggeredById], references: [id])
+
+  @@index([elderlyId])
+  @@index([resolved])
+  @@map("emergency_alerts")
+}

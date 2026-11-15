@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  # 1. Managed PostgreSQL Service
+  postgres:
+    image: postgres:16-alpine
+    container_name: carenest-production-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-carenest_db}
+      POSTGRES_USER: ${POSTGRES_USER:-carenest_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-SecureProductionDbPass2026!}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U carenest_admin -d carenest_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 2. Redis Cache & Job Queue Broker
+  redis:
+    image: redis:7-alpine
+    container_name: carenest-production-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-SecureRedisPass2026!}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-SecureRedisPass2026!}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 3. CareNest Express API Server
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: carenest-production-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-carenest_admin}:${POSTGRES_PASSWORD:-SecureProductionDbPass2026!}@postgres:5432/${POSTGRES_DB:-carenest_db}?schema=public
+      REDIS_URL: redis://:${REDIS_PASSWORD:-SecureRedisPass2026!}@redis:6379
+      JWT_SECRET: ${JWT_SECRET:-CareNestUltraSecureProductionJwtKey2026!HealthPlatform}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-CareNestUltraSecureProductionRefreshKey2026!}
+      VAULT_HMAC_SECRET: ${VAULT_HMAC_SECRET:-CareNestHmacSha256VaultSecretSignature2026!}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173,http://localhost:80}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-json}
+      EMAIL_FROM: CareNest Health <notifications@carenest.health>
+    ports:
+      - "5000:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:
+
